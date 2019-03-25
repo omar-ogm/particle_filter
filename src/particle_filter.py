@@ -123,8 +123,6 @@ class ParticleFilter:
 
 
     def __draw_particles(self, draw_points, draw_bounding_box):
-        #TODO draw on the iamge the particles, the center and the bounding box if wanted (size of the particle based on
-        # the neighbourhood
         for particle in self.particles_list:
             position = (particle.x, particle.y)
             if (draw_points):
