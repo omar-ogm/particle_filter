@@ -6,10 +6,9 @@ from particle import ParticleType, ParticleLocation
 class ParticleFilter:
     def __init__(self, particle_number, image_size, particle_type, neighbourhood_size):
         """
-
-        :param particle_number:
-        :param image_size:
-        :param particle_type:
+        :param particle_number: The number of particles that the algorithm will handle
+        :param image_size: A tuple with (height, width, channels) as tupla
+        :param particle_type: Type of particle.
         :param neighbourhood_size: A tupla of two int elements that represents the size of the rectangle around the
         particles, that will be used to calculate the weight in that particle.
         """
@@ -21,6 +20,7 @@ class ParticleFilter:
         self.actual_image = None
 
         self.is_first_execution = True
+        self.total_weight = 0
 
     def execute(self, image, mask, debug_mode=False):
         """
@@ -32,20 +32,19 @@ class ParticleFilter:
         :return:
         """
         self.actual_image = image
-        if (self.is_first_execution):
-            self.is_first_execution = False
+
+        while (self.__is_initialization_needed()):
             self.__initialization()
+            self.__evaluation(mask=mask) # Evaluation updates total_weight value use in is_initialization_needed
 
         if (debug_mode):
             self.__draw_particles(draw_points=True, draw_bounding_box=True)
-            cv2.imshow("Particle Filter", self.actual_image)
-            cv2.waitKey(0)
 
-        self.__evaluation(mask=mask)
+        # Get the estimation for all the parameters of the state. x,y, vx, vy, Ix,Iy and all the ones you can think of.
+        estimation_state = self.__estimation(use_mean_value=False)
 
-        if (self.__is_initialization_needed()):
-            print("Reinitialization due to low weight")
-            self.__initialization()
+        # Show the estimation
+        self.__draw_estimation(estimation_state)
 
     def __initialization(self):
         """
@@ -70,6 +69,8 @@ class ParticleFilter:
 
             self.particles_list.append(particle)
 
+        print("Initializing particles")
+
     def __is_initialization_needed(self):
         """
         Checks if the particles has been already initialized, or if the first initialization wasnt good enough to
@@ -80,8 +81,13 @@ class ParticleFilter:
         """
         result = False
         total_weight_threshold = 200
-        if (self.total_weight < total_weight_threshold):
+
+        if (self.is_first_execution):
+            self.is_first_execution = False
             result = True
+        elif (self.total_weight < total_weight_threshold):
+            result = True
+            print("Reinitialization needed due to low weight")
 
         return result
 
@@ -115,20 +121,58 @@ class ParticleFilter:
 
         # Normalize weights values for all particles, based on the total pixels count of all the particles
         # test_weight = 0 # JUST FOR TESTING THAT IT EQUALS 1 AFTER ALL
-        for particle in self.particles_list:
-            particle.weight = particle.weight / self.total_weight
-            # test_weight += particle.weight
 
-        # print(test_weight)
+        if (self.total_weight != 0):
 
+            for particle in self.particles_list:
+                particle.weight = particle.weight / self.total_weight
+                # test_weight += particle.weight
+
+            # print(test_weight)
+
+    def __estimation(self, use_mean_value=False, mean_number=0):
+        """
+        Estimate the values of the state. Different criteria can be applied here.
+        :param use_mean_value: True if the mean value of the states among n_number of the particles with higher weights
+        will be used. False the state of the particle with the highest weight will be used.
+        :param mean_number: Leave as 0, all the particles will be used to do the mean. If different from 0 this will be
+        the number of particles used to measure the mean. The particles selected will be those of higher weight value.
+        :return: The estimation, a list with all the parameters of the state. [x, y]
+        """
+        estimation = []
+
+        if (use_mean_value):
+            #TODO MEAN
+            print("TODO")
+        else:
+            weights_list = [particle.weight for particle in self.particles_list]
+            most_possible_particle = self.particles_list[np.argmax(weights_list)]
+            estimation = [most_possible_particle.x, most_possible_particle.y]
+
+        return estimation
+
+
+    def __draw_estimation(self, central_coord):
+        image = np.copy(self.actual_image)
+        cv2.circle(image, center=tuple(central_coord), radius=1, color=(0, 255, 255), thickness=1)
+        top_left_point = (central_coord[0] - self.neighbourhood_size[0], central_coord[1] - self.neighbourhood_size[1])
+        bottom_right_point = (central_coord[0] + self.neighbourhood_size[0], central_coord[1] + self.neighbourhood_size[1])
+        cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 255, 0),
+                      thickness=1)
+        cv2.imshow("Estimation", image)
+        cv2.waitKey(0)
 
     def __draw_particles(self, draw_points, draw_bounding_box):
+        image = np.copy(self.actual_image)
         for particle in self.particles_list:
             position = (particle.x, particle.y)
             if (draw_points):
-                cv2.circle(self.actual_image, center=position, radius=1, color=(0, 255, 0), thickness=1)
+                cv2.circle(image, center=position, radius=1, color=(0, 255, 0), thickness=1)
             if (draw_bounding_box):
                 top_left_point = (particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1])
                 bottom_right_point = (particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1])
-                cv2.rectangle(self.actual_image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 0, 0),
+                cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 0, 0),
                               thickness=1)
+
+        cv2.imshow("Particle Filter", image)
+        cv2.waitKey(0)
