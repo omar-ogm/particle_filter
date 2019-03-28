@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 from particle import ParticleType, ParticleLocation
+import copy
 
 
 class ParticleFilter:
@@ -21,6 +22,7 @@ class ParticleFilter:
 
         self.is_first_execution = True
         self.total_weight = 0
+        self.max_initialization_iters = 5
 
     def execute(self, image, mask, debug_mode=False):
         """
@@ -32,19 +34,43 @@ class ParticleFilter:
         :return:
         """
         self.actual_image = image
+        evaluation_done = False
 
+        initialization_iter = 0
+        # 1-2. INITIALIZATION AND EVALUATION
         while (self.__is_initialization_needed()):
             self.__initialization()
-            self.__evaluation(mask=mask) # Evaluation updates total_weight value use in is_initialization_needed
+            self.__evaluation(mask=mask)  # Evaluation updates total_weight value use in is_initialization_needed
+            evaluation_done = True
+            initialization_iter += 1
+
+            if (initialization_iter == self.max_initialization_iters):
+                print("The initialization could not find the object, object is missing!")
+                return
+
+        # 2. EVALUATION
+        if (not evaluation_done):
+            self.__evaluation(mask=mask)
+
 
         if (debug_mode):
             self.__draw_particles(draw_points=True, draw_bounding_box=True)
 
+        # 3. ESTIMATION
         # Get the estimation for all the parameters of the state. x,y, vx, vy, Ix,Iy and all the ones you can think of.
         estimation_state = self.__estimation(use_mean_value=False)
 
         # Show the estimation
         self.__draw_estimation(estimation_state)
+
+        # 4. RESAMPLING or SELECTION
+        self.__resampling()
+
+        # 5. DIFFUSION
+        self.__diffusion()
+
+        # Show for a period of time all each image
+        cv2.waitKey(500)  # 0.5 secs
 
     def __initialization(self):
         """
@@ -53,6 +79,7 @@ class ParticleFilter:
         The initialization used is based on a uniform pdf over the image pixel.
         :return:
         """
+        self.particles_list = []
         height, width, _ = self.image_size #CHEQUEAR QUE DE VERDAD SEA ASI Y NO AL REVES
         x_positions = np.random.randint(0, width + 1, self.particle_number)
         y_positions = np.random.randint(0, height + 1, self.particle_number)
@@ -151,6 +178,48 @@ class ParticleFilter:
 
         return estimation
 
+    def __resampling(self):
+        """
+        The selection or resampling is the technique used to resample the particles based or their weights. Like in
+        evolution the particles with more possibilities to survive are the ones with the higher weights. To select the
+        new population of particles a sampling with replacement will be used. There will be sample as many particles as
+        the original population had
+        :return:
+        """
+        # sort the list in place in ascending order by default. use reverse to inverse the order.
+        self.particles_list.sort(key=lambda particle: particle.weight) # From lower to upper
+        # Get the list of weights only, ordered.
+        weights_list = np.asarray([particle.weight for particle in self.particles_list])
+        # Now the the weights are ordered, the accumulated weight list must be created
+        weights_accumulated_list = np.cumsum(weights_list)
+        new_particles_list = []
+
+        # Roullete method or Roullete selection in genetic algorithms (works the same, the best will survive while the
+        # worst will perish in the end)
+        for idx in range(0, len(self.particles_list)):
+            random = np.random.uniform()  # value between 0-1 (1 is excluded)
+            # max in case of several maximum(True in this case) will return the first weight encountered that is bigger.
+            particle_idx = np.argmax(weights_accumulated_list > random)
+            # Its important here to make a deepcopy so the object in the new list is not a reference but a full copy on
+            # the object. So changes in teh particles list wont affect the new_list.
+            new_particles_list.append(copy.deepcopy(self.particles_list[particle_idx]))
+
+        self.particles_list = new_particles_list  # Update the list of particles with the new values.
+
+    def __diffusion(self):
+        """
+        The diffusion step, is apply after the new population of particles has been chosen. Since the particles chosen
+        are repeated, a perturbation or diffusion is applied to evade the impoverishment of the sample. Like in
+        evolution the new population should be made of the genes of the stronger individuals in the previous population
+        but also had their unique distinctiveness.
+        :return:
+        """
+        sigma = 5  #standard deviation in pixels. Is a experimental value.
+
+        for particle in self.particles_list:
+            particle.x = int(np.round(np.random.normal(particle.x, sigma)))
+            particle.y = int(np.round(np.random.normal(particle.y, sigma)))
+
 
     def __draw_estimation(self, central_coord):
         image = np.copy(self.actual_image)
@@ -160,7 +229,7 @@ class ParticleFilter:
         cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 255, 0),
                       thickness=1)
         cv2.imshow("Estimation", image)
-        cv2.waitKey(0)
+        # cv2.waitKey(500)
 
     def __draw_particles(self, draw_points, draw_bounding_box):
         image = np.copy(self.actual_image)
@@ -174,5 +243,5 @@ class ParticleFilter:
                 cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 0, 0),
                               thickness=1)
 
-        cv2.imshow("Particle Filter", image)
-        cv2.waitKey(0)
+        cv2.imshow("Particles", image)
+        # cv2.waitKey(500)

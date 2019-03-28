@@ -2,28 +2,70 @@ import cv2
 import backgroundSubtraction
 import particle_filter
 import particle
+import argparse
+import glob
+import os
 
-if __name__ == '__main__':
-    PARTICLE_NUMBER = 100
-    PARTICLE_TYPE = particle.ParticleType.LOCATION
-    NEIGHBOURHOOD_SIZE = (10, 10)
-    BACKGROUND_IMAGE_PATH = r"/home/omar/workspaces/python/Filtro_Particulas/Recursos_practica/SecuenciaPelota/1.jpg"
-
-
-    # New image
-    image_path = r"/home/omar/workspaces/python/Filtro_Particulas/Recursos_practica/SecuenciaPelota/10.jpg"
-
-    image = cv2.imread(image_path)
-    image_size = image.shape
+def preprocessing1(_image):
+    """
+    Preprocessing method, to retrieve the mask in the first dataset. The one with the ball falling called
+    "SecuenciaPelota"
+    :return:
+    """
+    BACKGROUND_IMAGE_PATH = r"/home/omar/workspaces/python/Filtro_Particulas/Recursos_practica/SecuenciaPelota/01.jpg"
 
     # Obtain the mask
     bck_sub = backgroundSubtraction.BackgroundSubtraction(background=cv2.imread(BACKGROUND_IMAGE_PATH), threshold=50)
-    mask = bck_sub.static_subtraction(image)
+    _mask = bck_sub.static_subtraction(_image)
 
     kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small)
+    _mask = cv2.morphologyEx(_mask, cv2.MORPH_OPEN, kernel_small)
+    return _mask
 
-    #TODO: read images from location.
-    pF = particle_filter.ParticleFilter(particle_number=PARTICLE_NUMBER, image_size=image_size,
-                                        particle_type=PARTICLE_TYPE, neighbourhood_size=NEIGHBOURHOOD_SIZE)
-    pF.execute(image, mask=mask, debug_mode=True)
+if __name__ == '__main__':
+
+    # ******* VARIABLES *******
+    PARTICLE_NUMBER = 100
+    PARTICLE_TYPE = particle.ParticleType.LOCATION
+    NEIGHBOURHOOD_SIZE = (10, 10)
+
+    #******* Argument retrieval *******
+    # Reading arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--input_path", dest="input_path", type=str, required=True,
+                        help="Path to the directory where the images of the sequence is")
+
+    args = vars(parser.parse_args())
+    input_path = args['input_path']
+
+
+    # Iterate over all the images of the directory.
+    all_files_sorted = sorted(glob.glob(os.path.join(input_path, '*')))
+
+    first_execution = True
+    for image_path in all_files_sorted:
+
+        image = cv2.imread(image_path)
+        image_size = image.shape
+
+        mask = preprocessing1(image)
+
+        #Debug
+        cv2.imshow("Mask", mask)
+        # cv2.waitKey(0)
+
+        if (first_execution):
+            first_execution = False
+            # A particle filter instance
+            pF = particle_filter.ParticleFilter(particle_number=PARTICLE_NUMBER, image_size=image_size,
+                                                particle_type=PARTICLE_TYPE, neighbourhood_size=NEIGHBOURHOOD_SIZE)
+
+        pF.execute(image, mask=mask, debug_mode=True)
+
+
+    # TEST
+    # Simulate iteration with the same image
+
+    # pF.execute(image, mask=mask, debug_mode=True)
+    # pF.execute(image, mask=mask, debug_mode=True)
+    # pF.execute(image, mask=mask, debug_mode=True)
