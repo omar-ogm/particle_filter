@@ -24,20 +24,31 @@ def preprocessing1(_image):
 
 if __name__ == '__main__':
 
-    # ******* VARIABLES *******
-    PARTICLE_NUMBER = 100
-    PARTICLE_TYPE = particle.ParticleType.LOCATION_BBOX_SPEED
-    NEIGHBOURHOOD_SIZE = (10, 10)
-
     #******* Argument retrieval *******
     # Reading arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input_path", dest="input_path", type=str, required=True,
                         help="Path to the directory where the images of the sequence is")
 
+    parser.add_argument("-p", "--particles", dest="particles", type=int, required=True,
+                        help="Number of particles desired")
+
+    parser.add_argument("-t", "--type", dest="type", type=str, required=True, choices=["LOCATION", "SPEED"],
+                        help="LOCATION for simple particles fixed size that move randomly or \n"
+                             "SPEED for particles that modify their size and also try to predict movement")
+
     args = vars(parser.parse_args())
     input_path = args['input_path']
 
+    # ******* VARIABLES *******
+    PARTICLE_NUMBER = args['particles']
+
+    type = args['type']
+    if (type == "LOCATION"):
+        PARTICLE_TYPE = particle.ParticleType.LOCATION
+    elif (type == "SPEED"):
+        PARTICLE_TYPE = particle.ParticleType.LOCATION_BBOX_SPEED
+    NEIGHBOURHOOD_SIZE = (10, 10)
 
     # Iterate over all the images of the directory.
     all_files_sorted = sorted(glob.glob(os.path.join(input_path, '*')))
