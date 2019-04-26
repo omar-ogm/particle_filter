@@ -12,7 +12,7 @@ def preprocessing1(_image):
     "SecuenciaPelota"
     :return:
     """
-    BACKGROUND_IMAGE_PATH = r"/home/omar/workspaces/python/Filtro_Particulas/Recursos_practica/SecuenciaPelota/01.jpg"
+    BACKGROUND_IMAGE_PATH = r"resources/SecuenciaPelota/01.jpg"
 
     # Obtain the mask
     bck_sub = backgroundSubtraction.BackgroundSubtraction(background=cv2.imread(BACKGROUND_IMAGE_PATH), threshold=50)
@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     # ******* VARIABLES *******
     PARTICLE_NUMBER = 100
-    PARTICLE_TYPE = particle.ParticleType.LOCATION
+    PARTICLE_TYPE = particle.ParticleType.LOCATION_BBOX_SPEED
     NEIGHBOURHOOD_SIZE = (10, 10)
 
     #******* Argument retrieval *******
