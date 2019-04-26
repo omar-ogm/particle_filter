@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from particle import ParticleType, ParticleLocation
+from particle import ParticleType, ParticleLocation, ParticleLocationSizeSpeed
 import copy
 
 
@@ -69,6 +69,10 @@ class ParticleFilter:
         # 5. DIFFUSION
         self.__diffusion()
 
+        # 6. MOVEMENT PREDICTION
+        if self.particle_type == ParticleType.LOCATION_SPEED or self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+            self.__movement_prediction()
+
         # Show for a period of time all each image
         cv2.waitKey(500)  # 0.5 secs
 
@@ -92,7 +96,22 @@ class ParticleFilter:
             if self.particle_type == ParticleType.LOCATION:
                 state = position
                 particle = ParticleLocation(state=state, weight=weight)
-            # TODO: CREATE THE REST OF CASES FOR THE REST OF POSSIBLE PARTICLES
+            elif self.particle_type == ParticleType.LOCATION_BBOX:
+                print("Not implemented ParticleType.LOCATION_BBOX, exiting")
+                exit(-1)
+            elif self.particle_type == ParticleType.LOCATION_SPEED:
+                print("Not implemented ParticleType.LOCATION_SPEED, exiting")
+                exit(-1)
+            elif self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+                Ix = self.neighbourhood_size[0]
+                Iy = self.neighbourhood_size[1]
+                Vx = 0
+                Vy = 0
+                state = (position[0], position[1], Ix, Iy, Vx, Vy)
+                particle = ParticleLocationSizeSpeed(state=state, weight=weight)
+            else:
+                print("Not a valid particle filter type, exiting")
+                exit(-1)
 
             self.particles_list.append(particle)
 
@@ -118,8 +137,6 @@ class ParticleFilter:
 
         return result
 
-
-
     def __evaluation(self, mask):
         """
         The evaluation is the steep where the weights for each particle is computed. The evaluation receives a boolean
@@ -129,16 +146,43 @@ class ParticleFilter:
         """
         self.total_weight = 0
         for particle in self.particles_list:
-            top_left_point = np.array([particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1]])
-            bottom_right_point = np.array([particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1]])
-            # If there are points with negative values, change them to 0
-            top_left_point = top_left_point.clip(min=0)
-            bottom_right_point = bottom_right_point.clip(min=0)
-            # NOTE: In case the area goes outside the limits of the image, the "roi" will be smaller than the value it
-            # should, not a problem though
-            roi = mask[top_left_point[1]:bottom_right_point[1], top_left_point[0]:bottom_right_point[0]]
-            particle.weight = np.count_nonzero(roi)
-            self.total_weight += particle.weight
+            if self.particle_type == ParticleType.LOCATION or self.particle_type == ParticleType.LOCATION_SPEED:
+                top_left_point = np.array(
+                    [particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1]])
+                bottom_right_point = np.array(
+                    [particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1]])
+                # If there are points with negative values, change them to 0
+                top_left_point = top_left_point.clip(min=0)
+                bottom_right_point = bottom_right_point.clip(min=0)
+                # NOTE: In case the area goes outside the limits of the image, the "roi" will be smaller than the value
+                # it should, not a problem though
+                roi = mask[top_left_point[1]:bottom_right_point[1], top_left_point[0]:bottom_right_point[0]]
+                particle.weight = np.count_nonzero(roi)
+                self.total_weight += particle.weight
+            elif self.particle_type == ParticleType.LOCATION_BBOX or \
+                    self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+                top_left_point = np.array([particle.x - particle.Ix, particle.y - particle.Iy])
+                bottom_right_point = np.array([particle.x + particle.Ix, particle.y + particle.Iy])
+                # If there are points with negative values, change them to 0
+                top_left_point = top_left_point.clip(min=0)
+                bottom_right_point = bottom_right_point.clip(min=0)
+                # NOTE: In case the area goes outside the limits of the image, the "roi" will be smaller than the value
+                # it should, not a problem though
+                roi = mask[top_left_point[1]:bottom_right_point[1], top_left_point[0]:bottom_right_point[0]]
+
+                # The particle weight will be defined by the area with pixels from the target on it and also by the
+                # pixels that dont belong to the target, otherwise the Ix,Iy will grow indefinitely so it always get the
+                # full target, so adding a penalization based on the pixel not in the target I made sure it tries to
+                # cover only the target.
+                # TODO: Could be improved using something like IoU with using the groundtruth the number of pixels
+                #  from the target.
+                pixels_on_target = np.count_nonzero(roi)
+                total_pixels = roi.size
+                particle.weight = pixels_on_target - (total_pixels-pixels_on_target)*0.75
+                if (particle.weight < 0):
+                    particle.weight = 0
+                self.total_weight += particle.weight
+
 
             # print(roi.size) #Total number of elements, in this case pixels
             # print(top_left_point)
@@ -174,7 +218,7 @@ class ParticleFilter:
         else:
             weights_list = [particle.weight for particle in self.particles_list]
             most_possible_particle = self.particles_list[np.argmax(weights_list)]
-            estimation = [most_possible_particle.x, most_possible_particle.y]
+            estimation = most_possible_particle
 
         return estimation
 
@@ -214,22 +258,59 @@ class ParticleFilter:
         but also had their unique distinctiveness.
         :return:
         """
-        sigma = 5  #standard deviation in pixels. Is a experimental value.
+        sigma = 10  #standard deviation in pixels. Is a experimental value.
+        sigma_size = 1
+        sigma_speed = 5
 
         for particle in self.particles_list:
+            # TODO: Maybe is better to have the particles made its own diffusion in a class method
+            # Common for all particles
             particle.x = int(np.round(np.random.normal(particle.x, sigma)))
             particle.y = int(np.round(np.random.normal(particle.y, sigma)))
 
+            if self.particle_type == ParticleType.LOCATION:
+                continue
+            elif self.particle_type == ParticleType.LOCATION_SPEED:
+                raise NotImplementedError()
+            elif self.particle_type == ParticleType.LOCATION_BBOX:
+                raise NotImplementedError()
+            elif self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+                particle.Ix = int(np.round(np.random.normal(particle.Ix, sigma_size)))
+                particle.Iy = int(np.round(np.random.normal(particle.Iy, sigma_size)))
+                particle.Vx = int(np.round(np.random.normal(particle.Vx, sigma_speed)))
+                particle.Vy = int(np.round(np.random.normal(particle.Vy, sigma_speed)))
 
-    def __draw_estimation(self, central_coord):
+    def __movement_prediction(self):
+        """
+        This method simulates the movement of the particles. The particles had a speed, so we move the particles by
+        their speed to simulate the movement allowing the best particles to follow the object better
+        :return:
+        """
+        for particle in self.particles_list:
+            if self.particle_type == ParticleType.LOCATION or self.particle_type == ParticleType.LOCATION_BBOX:
+                return
+            elif self.particle_type == ParticleType.LOCATION_SPEED or self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+                particle.x = particle.x + round(particle.Vx)
+                particle.y = particle.y + round(particle.Vy)
+
+    def __draw_estimation(self, particle):
         image = np.copy(self.actual_image)
-        cv2.circle(image, center=tuple(central_coord), radius=1, color=(0, 255, 255), thickness=1)
-        top_left_point = (central_coord[0] - self.neighbourhood_size[0], central_coord[1] - self.neighbourhood_size[1])
-        bottom_right_point = (central_coord[0] + self.neighbourhood_size[0], central_coord[1] + self.neighbourhood_size[1])
+        cv2.circle(image, center=(particle.x, particle.y), radius=1, color=(0, 255, 255), thickness=1)
+
+        if self.particle_type == ParticleType.LOCATION or self.particle_type == ParticleType.LOCATION_SPEED:
+            top_left_point = (particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1])
+            bottom_right_point = (particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1])
+        elif self.particle_type == ParticleType.LOCATION_BBOX \
+                or self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+            top_left_point = (particle.x - particle.Ix, particle.y - particle.Iy)
+            bottom_right_point = (particle.x + particle.Ix, particle.y + particle.Iy)
+
         cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 255, 0),
                       thickness=1)
+        if (self.particle_type == ParticleType.LOCATION_SPEED or self.particle_type == ParticleType.LOCATION_BBOX_SPEED):
+            cv2.putText(image, "Vx=" + str(particle.Vx), (10, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+            cv2.putText(image, "Vy=" + str(particle.Vy), (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.imshow("Estimation", image)
-        # cv2.waitKey(500)
 
     def __draw_particles(self, draw_points, draw_bounding_box):
         image = np.copy(self.actual_image)
@@ -238,10 +319,14 @@ class ParticleFilter:
             if (draw_points):
                 cv2.circle(image, center=position, radius=1, color=(0, 255, 0), thickness=1)
             if (draw_bounding_box):
-                top_left_point = (particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1])
-                bottom_right_point = (particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1])
-                cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 0, 0),
-                              thickness=1)
+                if self.particle_type == ParticleType.LOCATION or self.particle_type == ParticleType.LOCATION_SPEED:
+                    top_left_point = (particle.x - self.neighbourhood_size[0], particle.y - self.neighbourhood_size[1])
+                    bottom_right_point = (particle.x + self.neighbourhood_size[0], particle.y + self.neighbourhood_size[1])
+                elif self.particle_type == ParticleType.LOCATION_BBOX \
+                        or self.particle_type == ParticleType.LOCATION_BBOX_SPEED:
+                    top_left_point = (particle.x - particle.Ix, particle.y - particle.Iy)
+                    bottom_right_point = (particle.x + particle.Ix, particle.y + particle.Iy)
+
+                cv2.rectangle(image, pt1=top_left_point, pt2=bottom_right_point, color=(255, 0, 0), thickness=1)
 
         cv2.imshow("Particles", image)
-        # cv2.waitKey(500)
