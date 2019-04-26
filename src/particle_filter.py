@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from particle import ParticleType, ParticleLocation, ParticleLocationSizeSpeed
+from src.particle import ParticleType, ParticleLocation, ParticleLocationSizeSpeed
 import copy
 
 

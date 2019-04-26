@@ -1,7 +1,7 @@
 import cv2
-import backgroundSubtraction
-import particle_filter
-import particle
+from src.backgroundSubtraction import BackgroundSubtraction
+from src.particle import ParticleType
+from src.particle_filter import ParticleFilter
 import argparse
 import glob
 import os
@@ -15,7 +15,7 @@ def preprocessing1(_image):
     BACKGROUND_IMAGE_PATH = r"resources/SecuenciaPelota/01.jpg"
 
     # Obtain the mask
-    bck_sub = backgroundSubtraction.BackgroundSubtraction(background=cv2.imread(BACKGROUND_IMAGE_PATH), threshold=50)
+    bck_sub = BackgroundSubtraction(background=cv2.imread(BACKGROUND_IMAGE_PATH), threshold=50)
     _mask = bck_sub.static_subtraction(_image)
 
     kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
@@ -45,9 +45,9 @@ if __name__ == '__main__':
 
     type = args['type']
     if (type == "LOCATION"):
-        PARTICLE_TYPE = particle.ParticleType.LOCATION
+        PARTICLE_TYPE = ParticleType.LOCATION
     elif (type == "SPEED"):
-        PARTICLE_TYPE = particle.ParticleType.LOCATION_BBOX_SPEED
+        PARTICLE_TYPE = ParticleType.LOCATION_BBOX_SPEED
     NEIGHBOURHOOD_SIZE = (10, 10)
 
     # Iterate over all the images of the directory.
@@ -68,7 +68,7 @@ if __name__ == '__main__':
         if (first_execution):
             first_execution = False
             # A particle filter instance
-            pF = particle_filter.ParticleFilter(particle_number=PARTICLE_NUMBER, image_size=image_size,
+            pF = ParticleFilter(particle_number=PARTICLE_NUMBER, image_size=image_size,
                                                 particle_type=PARTICLE_TYPE, neighbourhood_size=NEIGHBOURHOOD_SIZE)
 
         pF.execute(image, mask=mask, debug_mode=True)
