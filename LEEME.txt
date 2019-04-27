@@ -1,0 +1,21 @@
+**********Filtro de particulas***********
+Requisitos:
+-Numpy 
+-opencv-python
+
+Cualquier version debería valer ya que se usan funciones muy genericas.
+
+Version de python:
+-Python3
+
+Ejecucion:
+
+Para ejecutar ir dentro de la carpeta /particle_filter/.
+Una vez dentro abrir una terminal y ejecutar:
+
+python3 main.py -i="resources/SecuenciaPelota" -p="100" -t="SPEED"
+
+Argumentos:
+-i : Debe apuntar a la carpeta contenedora del dataset de pruebas
+-p : Numero de particulas (A elegir)
+-t : Define el tipo de particulas a usar. Dos implementaciones (LOCATION, SPEED). Location solo utiliza la informacion de localizacion de la particula, SPEED añade información del tamaño, velocidad y prediccion del movimiento.
